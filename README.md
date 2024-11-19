@@ -1,3 +1,42 @@
+This is a forked version of [donaldzou/wireguard-dashboard](https://github.com/donaldzou/WGDashboard) that installs and runs correctly on freebsd...
+
+Required packages before installing...
+```
+pkg install -y sudo bash git
+```
+
+Clone the repo and then run the following:
+```
+cd WGDashboard/src
+chmod +x wgd.sh
+./wgd.sh install
+```
+
+Once installed you will need to modify the `ifcfg` perl module to support FreeBSD, as it doesn't at this time, by editing `./venv/lib/python3.11/site-packages/ifcfg/__init__.py`
+and making the change as per the diff below:
+```
+--- venv/lib/python3.11/site-packages/ifcfg/__init__.py
++++ venv/lib/python3.11/site-packages/ifcfg/__init__.py.orig
+@@ -28,7 +28,7 @@
+                 Log.warning("Neither `ifconfig` (`%s`) nor `ip` (`%s`) commands are available, listing network interfaces is likely to fail",
+                             parser.LinuxParser.get_command(),
+                             parser.UnixIPParser.get_command())
+-    elif distro in ['Darwin', 'MacOSX', 'FreeBSD']:
++    elif distro in ['Darwin', 'MacOSX']:
+         Parser = parser.MacOSXParser
+     elif distro == 'Windows':
+         # For some strange reason, Windows will always be win32, see:
+```
+I used the `MacOSXParser` as it works with FreeBSD and the outputs for the interfaces and the commands used for routing are the same as with MacOSX and Darwin.
+
+
+Once complete you can run the dashboard as per normal with:
+```
+./wgd.sh start
+or
+./wgd.sh debug
+```
+
 > [!NOTE]
 > **Help Wanted 🎉**: Localizing WGDashboard to other languages! If you're willing to help, please visit https://github.com/donaldzou/WGDashboard/issues/397. Many thanks!
 <hr>
