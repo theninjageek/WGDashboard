@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # wgd.sh - Copyright(C) 2024 Donald Zou [https://github.com/donaldzou]
 # Under Apache-2.0 License
@@ -23,6 +23,8 @@ else
   cb_work_dir=/etc/letsencrypt
   cb_config_dir=/var/lib/letsencrypt
 fi
+
+default_wg_cfg="/etc/wireguard"
 
 dashes='------------------------------------------------------------'
 equals='============================================================'
@@ -87,7 +89,10 @@ _installPython(){
 		;;
 		alpine)
 				{ sudo apk update; sudo apk add python3 net-tools --no-cache; printf "\n\n"; } >> ./log/install.txt
-			;;
+		;;
+		freebsd)
+				{ sudo pkg install -y python3; printf "\n\n"; } >> ./log/install.txt
+		;;
 	esac
 	
 	if ! python3 --version > /dev/null 2>&1
@@ -115,6 +120,9 @@ _installPythonVenv(){
 			;;
 			alpine)
 				{ sudo apk update; sudo apk add py3-virtualenv ; printf "\n\n"; } >> ./log/install.txt
+			;;
+			freebsd)
+				{ sudo pkg install -y py311-virtualenv; printf "\n\n"; } >> ./log/install.txt
 			;;
 			*)
 				printf "[WGDashboard] %s Sorry, your OS is not supported. Currently the install script only support Debian-based, Red Hat-based OS. With experimental support for Alpine Linux.\n" "$heavy_crossmark"
@@ -160,6 +168,9 @@ _installPythonPip(){
 			alpine)
 				{ sudo apk update; sudo apk add py3-pip --no-cache; printf "\n\n"; } >> ./log/install.txt
 			;;
+			freebsd)
+				{ sudo pkg install -y py311-pip; printf "\n\n"; } >> ./log/install.txt
+			;;
 			*)
 				printf "[WGDashboard] %s Sorry, your OS is not supported. Currently the install script only support Debian-based, Red Hat-based OS. With experimental support for Alpine Linux.\n" "$heavy_crossmark"
 				printf "%s\n" "$helpMsg"
@@ -176,6 +187,22 @@ _installPythonPip(){
 	else
 		printf "[WGDashboard] %s Python Package Manager (PIP) is installed\n" "$heavy_checkmark"
 	fi
+}
+
+_installPythonSQLite(){
+	# Needed for FreeBSD
+	if ! $pythonExecutable -m pip list | grep -q sqlite3; then
+		{ pkg install -y py311-sqlite3; printf "\n\n"; } >> ./log/install.txt
+	fi
+
+	if ! $pythonExecutable -m pip list | grep -q sqlite3; then
+		printf "[WGDashboard] %s Python SQLite3 package is still not installed, halting script now.\n" "$heavy_crossmark"
+		printf "%s\n" "$helpMsg"
+		kill  $TOP_PID
+	else
+		printf "[WGDashboard] %s Python SQLite3 package is installed\n" "$heavy_checkmark"
+	fi
+	
 }
 
 _checkWireguard(){
@@ -200,6 +227,12 @@ _checkWireguard(){
                     printf "\n[WGDashboard] WireGuard installed on %s.\n\n" "$OS"; 
                 } &>> ./log/install.txt
             ;;
+    	    freebsd)
+	        {
+		    sudo pkg install -y wireguard-tools;
+                    printf "\n[WGDashboard] WireGuard installed on %s.\n\n" "$OS"; 
+                } &>> ./log/install.txt
+	    ;;		    
             *)
                 printf "[WGDashboard] %s Sorry, your OS is not supported. Currently, the install script only supports Debian-based, Red Hat-based, and Alpine Linux.\n" "$heavy_crossmark"
                 printf "%s\n" "$helpMsg"
@@ -241,11 +274,18 @@ _checkPythonVersion(){
 
 install_wgd(){
     printf "[WGDashboard] Starting to install WGDashboard\n"
-    
-    if [ ! -d "/etc/wireguard/WGDashboard_Backup" ]
-    	then
-    		printf "[WGDashboard] Creating /etc/wireguard/WGDashboard_Backup folder\n"
-            sudo mkdir "/etc/wireguard/WGDashboard_Backup"
+
+    _determineOS
+
+    if [ "$OS" = "freebsd" ]; then
+        wg_cfg="/usr/local/etc/wireguard"
+    else
+	wg_cfg=$default_wg_cfg
+    fi
+       
+    if [ ! -d "$wg_cfg/WGDashboard_Backup" ]; then
+    	printf "[WGDashboard] Creating $wg_cfg/WGDashboard_Backup folder\n"
+        sudo mkdir "$wg_cfg/WGDashboard_Backup"
     fi
     
     if [ ! -d "log" ]
@@ -253,7 +293,6 @@ install_wgd(){
 		printf "[WGDashboard] Creating ./log folder\n"
 		mkdir "log"
 	fi
-    _determineOS
     if ! python3 --version > /dev/null 2>&1
     then
     	printf "[WGDashboard] Python is not installed, trying to install now\n"
@@ -265,8 +304,11 @@ install_wgd(){
     _checkPythonVersion
     _installPythonVenv
     _installPythonPip
-	  _checkWireguard
-    sudo chmod -R 755 /etc/wireguard/
+    if [ "$OS" = "freebsd" ]; then
+        _installPythonSQLite
+    fi
+    _checkWireguard
+    sudo chmod -R 755 $wg_cfg 
 
     if [ ! -d "db" ] 
 		then 
@@ -275,10 +317,10 @@ install_wgd(){
     fi
     _check_and_set_venv
     printf "[WGDashboard] Upgrading Python Package Manage (PIP)\n"
-	{ date; python3 -m ensurepip --upgrade; printf "\n\n"; } >> ./log/install.txt
+    { date; python3 -m ensurepip --upgrade; printf "\n\n"; } >> ./log/install.txt
     { date; python3 -m pip install --upgrade pip; printf "\n\n"; } >> ./log/install.txt
     printf "[WGDashboard] Installing latest Python dependencies\n"
-	{ date; python3 -m pip install -r requirements.txt ; printf "\n\n"; } >> ./log/install.txt #This all works on the default installation.
+    { date; python3 -m pip install -r requirements.txt ; printf "\n\n"; } >> ./log/install.txt #This all works on the default installation.
     printf "[WGDashboard] WGDashboard installed successfully!\n"
     printf "[WGDashboard] Enter ./wgd.sh start to start the dashboard\n"
 }
