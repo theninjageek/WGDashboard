@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 import bcrypt
-import ifcfg
+import socket
 import psutil
 import pyotp
 from flask import Flask, request, render_template, session, g
@@ -32,12 +32,22 @@ CONFIGURATION_PATH = os.getenv('CONFIGURATION_PATH', '.')
 DB_PATH = os.path.join(CONFIGURATION_PATH, 'db')
 if not os.path.isdir(DB_PATH):
     os.mkdir(DB_PATH)
-DASHBOARD_CONF = os.path.join(CONFIGURATION_PATH, 'wg-dashboard.ini')
+DASHBOARD_CONF = os.path.join(CONFIGURATION_PATH, 'db', 'wg-dashboard.ini')
 WG_CONF_PATH = None
 UPDATE = None
 app = Flask("WGDashboard", template_folder=os.path.abspath("./static/app/dist"))
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 5206928
 app.secret_key = secrets.token_urlsafe(32)
+
+wgd_remote_endpoint = os.environ.get('WGD_REMOTE_ENDPOINT') or "0.0.0.0" 
+if wgd_remote_endpoint == '0.0.0.0': #<- use socket to get endpoint
+    try:
+        # Get the default IP address using a socket trick
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("1.1.1.1", 80))  # Connecting to a public IP
+            wgd_remote_endpoint = s.getsockname()[0]
+    except Exception:
+        wgd_remote_endpoint = '0.0.0.0'  # Fallback if socket fails
 
 class ModelEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
@@ -1345,7 +1355,8 @@ class DashboardConfig:
                 "peer_global_DNS": "1.1.1.1",
                 "peer_endpoint_allowed_ip": "0.0.0.0/0",
                 "peer_display_mode": "grid",
-                "remote_endpoint": ifcfg.default_interface()['inet'] if ifcfg.default_interface() else '',
+                #"remote_endpoint": ifcfg.default_interface()['inet'] if ifcfg.default_interface() else '',
+                "remote_endpoint": wgd_remote_endpoint,
                 "peer_MTU": "1420",
                 "peer_keep_alive": "21"
             },
